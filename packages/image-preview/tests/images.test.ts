@@ -14,6 +14,8 @@ import {
 	parseWebpSize,
 	pasteDir,
 	savePastedImage,
+	screenshotFileName,
+	screenshotTimestamp,
 	sniffImage,
 } from "../lib/images.ts";
 
@@ -170,7 +172,6 @@ test("savePastedImage writes into a user folder and never prunes it", () => {
 		const path = savePastedImage(Buffer.from([i % 256, Math.floor(i / 256)]), "png", {
 			context,
 			now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, i)),
-			random: () => `n${i}`,
 		});
 		assert.ok(path !== null);
 	}
@@ -184,12 +185,10 @@ test("savePastedImage reuses a file that already holds the same bytes", () => {
 	const first = savePastedImage(PNG_BYTES, "png", {
 		context,
 		now: () => new Date("2026-01-01T00:00:00.000Z"),
-		random: () => "a",
 	});
 	const second = savePastedImage(PNG_BYTES, "png", {
 		context,
 		now: () => new Date("2026-01-01T00:00:05.000Z"),
-		random: () => "b",
 	});
 	assert.ok(first !== null);
 	assert.equal(second, first);
@@ -200,10 +199,10 @@ test("savePastedImage names the file after the paste and keeps its bytes", () =>
 	const dir = join(tmpdir(), `gentle-preview-name-${process.pid}`);
 	const path = savePastedImage(PNG_BYTES, "png", {
 		context: { env: { GENTLE_IMAGE_PREVIEW_DIR: dir } },
-		now: () => new Date("2026-01-01T00:00:00.000Z"),
-		random: () => "abc",
+		// Local-time construction so the expected name is the same in any timezone.
+		now: () => new Date(2026, 0, 1, 0, 0, 0),
 	});
-	assert.equal(path, join(dir, "pasted-2026-01-01T00-00-00-000Z-abc.png"));
+	assert.equal(path, join(dir, "screenshot-2026-01-01_00-00-00.png"));
 	assert.equal(readFileSync(path ?? "").length, PNG_BYTES.length);
 });
 
@@ -214,11 +213,10 @@ test("savePastedImage keeps the temporary cache bounded", () => {
 		savePastedImage(Buffer.from([i % 256, Math.floor(i / 256)]), "png", {
 			context,
 			now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, i)),
-			random: () => `n${i}`,
 		});
 	}
 	const cacheDir = join(tmpDir, "gentle-preview-paste");
-	assert.equal(readdirSync(cacheDir).filter((name) => name.startsWith("pasted-")).length, 200);
+	assert.equal(readdirSync(cacheDir).filter((name) => name.startsWith("screenshot-")).length, 200);
 });
 
 test("savePastedImage refuses oversized payloads", () => {
@@ -228,4 +226,30 @@ test("savePastedImage refuses oversized payloads", () => {
 		}),
 		null,
 	);
+});
+
+test("screenshotTimestamp formats the local time the way the pictures folder already does", () => {
+	assert.equal(screenshotTimestamp(new Date(2026, 10, 2, 15, 5, 41)), "2026-11-02_15-05-41");
+	assert.equal(screenshotTimestamp(new Date(2026, 0, 9, 8, 7, 6)), "2026-01-09_08-07-06");
+});
+
+test("screenshotFileName adds a counter only when the base name is taken", () => {
+	const date = new Date(2026, 10, 2, 15, 5, 41);
+	assert.equal(screenshotFileName(date, "png"), "screenshot-2026-11-02_15-05-41.png");
+	assert.equal(screenshotFileName(date, "jpg", 2), "screenshot-2026-11-02_15-05-41-2.jpg");
+	assert.equal(screenshotFileName(date, "webp", 3), "screenshot-2026-11-02_15-05-41-3.webp");
+});
+
+test("savePastedImage does not overwrite an existing screenshot with the same timestamp", () => {
+	const dir = join(tmpdir(), `gentle-preview-collision-${process.pid}`);
+	const context = { env: { GENTLE_IMAGE_PREVIEW_DIR: dir } };
+	const now = () => new Date(2026, 10, 2, 15, 5, 41);
+	// Different bytes so dedupe cannot reuse the first file.
+	const first = savePastedImage(Buffer.from([1, 2, 3]), "png", { context, now });
+	const second = savePastedImage(Buffer.from([4, 5, 6]), "png", { context, now });
+	const third = savePastedImage(Buffer.from([7, 8, 9]), "png", { context, now });
+	assert.equal(first, join(dir, "screenshot-2026-11-02_15-05-41.png"));
+	assert.equal(second, join(dir, "screenshot-2026-11-02_15-05-41-2.png"));
+	assert.equal(third, join(dir, "screenshot-2026-11-02_15-05-41-3.png"));
+	assert.equal(readdirSync(dir).length, 3);
 });

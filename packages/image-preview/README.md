@@ -74,14 +74,29 @@ ascending order:
 Look at this [Image #1] compared with [Image #2]
 
 [Image refs]
-[Image #1] = /home/you/Pictures/screenshots/pasted-2026….png
-[Image #2] = /home/you/Pictures/screenshots/pasted-2026….png
+[Image #1] = /home/you/Pictures/screenshots/screenshot-2026-11-02_15-05-41.png
+[Image #2] = /home/you/Pictures/screenshots/screenshot-2026-11-02_15-05-41.png
 ```
 
 Your own message text is never dropped or rewritten; the block is appended
 after it. Unknown tokens produce no line.
 
 ## Paste shortcut
+
+This extension is meant to be the single owner of the paste shortcut. If you
+already had a paste extension installed — one that inserted a path and saved the
+clipboard image itself — disable it, otherwise both register the same key and Pi
+keeps whichever loads last:
+
+```json
+"extensions": ["-extensions/paste-image-to-screenshots.ts"]
+```
+
+The destination is never imposed: it is the folder you already configured, in
+this order — `GENTLE_IMAGE_PREVIEW_DIR`, `OMARCHY_SCREENSHOT_DIR`,
+`$XDG_PICTURES_DIR/screenshots`, an existing `~/Pictures/screenshots` — and only
+the bounded temp cache when none of them exists.
+
 
 - Default: `ctrl+v` — the key you already paste with. The shortcut replaces
   Pi's built-in clipboard paste (`app.clipboard.pasteImage`), and that is safe
@@ -160,7 +175,10 @@ in the session with its absolute path.
 - The temp cache is the only directory this extension ever prunes. A folder you
 own is never cleaned, and an image identical to one already there reuses that
   file instead of writing a duplicate.
-- Files are named `pasted-<timestamp>.<ext>`.
+- Files are named with the convention the pictures folder already uses:
+  `screenshot-YYYY-MM-DD_HH-MM-SS.<ext>`, and `-2`, `-3` … when that name is
+  taken. A pasted image therefore sits next to the screenshots already there
+  instead of introducing a second naming scheme.
 - Inline previews are capped at 40×8 terminal cells and 8 MB per image; larger
   files show the path and dimensions only.
 - **The editor box itself cannot be hovered.** Pi routes mouse input only in
