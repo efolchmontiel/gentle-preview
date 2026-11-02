@@ -1,0 +1,36 @@
+{
+	"name": "gentle-quick-peek",
+	"version": "0.1.0",
+	"description": "Preview a file, its lines around a given line, or its thumbnail from inside a Pi or Gentle Shell session, without opening it.",
+	"license": "MIT",
+	"type": "module",
+	"keywords": [
+		"pi-package",
+		"pi",
+		"pi-coding-agent",
+		"gentle-shell",
+		"preview",
+		"peek",
+		"file-preview",
+		"thumbnail"
+	],
+	"files": [
+		"assets/",
+		"extensions/",
+		"lib/",
+		"README.md"
+	],
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*",
+		"@earendil-works/pi-tui": "*"
+	},
+	"pi": {
+		"image": "./assets/peek-code.png",
+		"extensions": [
+			"./extensions/quick-peek.ts"
+		]
+	},
+	"scripts": {
+		"pack:check": "npm pack --dry-run"
+	}
+}

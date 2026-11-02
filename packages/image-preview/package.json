@@ -1,0 +1,36 @@
+{
+	"name": "gentle-image-preview",
+	"version": "0.1.0",
+	"description": "Number pasted images as [Image #N] and preview them, or read their real path, from inside a Pi or Gentle Shell session.",
+	"license": "MIT",
+	"type": "module",
+	"keywords": [
+		"pi-package",
+		"pi",
+		"pi-coding-agent",
+		"gentle-shell",
+		"preview",
+		"image",
+		"screenshot",
+		"clipboard"
+	],
+	"files": [
+		"assets/",
+		"extensions/",
+		"lib/",
+		"README.md"
+	],
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*",
+		"@earendil-works/pi-tui": "*"
+	},
+	"pi": {
+		"image": "./assets/image-two.png",
+		"extensions": [
+			"./extensions/image-preview.ts"
+		]
+	},
+	"scripts": {
+		"pack:check": "npm pack --dry-run"
+	}
+}

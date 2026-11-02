@@ -34,6 +34,22 @@ gentle-shell -e ./packages/quick-peek/extensions/quick-peek.ts
 pi -e ./packages/image-preview/extensions/image-preview.ts
 ```
 
+## What it looks like
+
+`gentle-quick-peek` — a code file with the named line lit, and a directory with its first entries:
+
+![A code file previewed with the named line lit](packages/quick-peek/assets/peek-code.png)
+
+![A directory previewed with its first entries](packages/quick-peek/assets/peek-directory.png)
+
+`gentle-image-preview` — one pasted image, and two images numbered in the same draft:
+
+![One pasted image numbered in the prompt](packages/image-preview/assets/image-one.png)
+
+![Two images numbered in the same draft](packages/image-preview/assets/image-two.png)
+
+These frames come from a real session running the packaged extensions, captured from the running TUI and re-rendered as static frames for legibility.
+
 ## Platforms
 
 | Platform | State |
@@ -72,6 +88,14 @@ scripts/run-tests.mjs                   — runs every suite, cleans its temp di
 odd/tasks/gentle-preview.md             — the feature document this work follows
 ```
 
+## Contributing
+
+**Every pull request must reference an accepted issue, and only the repository owner merges.** Work on an unaccepted issue may be closed without review, and a maintainer approving a change never means you may merge it yourself.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for the branch naming, the checks a pull request must pass, and the rules these packages hold to.
+
 ## License
 
-MIT. The ideas these plugins port come from midudev's better-claude (MIT); no source code was copied.
+MIT © efolchmontiel.
+
+The ideas these plugins port come from [midudev/better-claude](https://github.com/midudev/better-claude) (MIT © Miguel Ángel Durán), which implements them for Claude Code. This repository is an independent port to the Pi extension API: no source code, asset or test was copied. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the full attribution and the licence of every host and development dependency.
