@@ -15,6 +15,7 @@
 		"thumbnail"
 	],
 	"files": [
+		"assets/",
 		"extensions/",
 		"lib/",
 		"README.md"
@@ -24,6 +25,7 @@
 		"@earendil-works/pi-tui": "*"
 	},
 	"pi": {
+		"image": "./assets/peek-code.png",
 		"extensions": [
 			"./extensions/quick-peek.ts"
 		]
