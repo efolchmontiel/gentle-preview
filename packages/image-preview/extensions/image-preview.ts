@@ -1,9 +1,13 @@
 /**
  * gentle-image-preview — pasted images become `[Image #N]` tokens.
  *
- * - Paste shortcut (default ctrl+shift+v) saves the clipboard image to a
- *   bounded temp cache, allocates the next image number for the session and
- *   inserts `[Image #N]` in the editor instead of a long path.
+ * - Paste shortcut (default ctrl+v, the key the owner already pastes with)
+ *   covers what Pi's own paste did, because the last extension to register a
+ *   shortcut wins and the built-in paste then never runs: a clipboard image
+ *   is saved and inserted as `[Image #N]`, copied file paths are inserted as
+ *   their paths (one per line, or space-joined and quoted in bash mode),
+ *   plain text is inserted verbatim, and an unreadable clipboard pastes
+ *   nothing.
  * - The number→file mapping is persisted with `pi.appendEntry()` and rebuilt
  *   from the session branch on `session_start`, so tokens survive reloads.
  * - Before the text reaches the model, a trailing `[Image refs]` block maps
@@ -15,8 +19,8 @@
  *   the system viewer. Mouse input reaches the band only when Pi runs
  *   fullscreen — `/image-paths` is the always-available keyboard path.
  *
- * Clipboard reading degrades gracefully: when no platform backend can read an
- * image, the shortcut does nothing and Pi's own paste stays available.
+ * Clipboard reading degrades gracefully: when no platform backend can read
+ * anything, the shortcut does nothing and the editor stays untouched.
  */
 
 import { spawn, spawnSync } from "node:child_process";
@@ -25,7 +29,7 @@ import { basename } from "node:path";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { detectCapabilities, Image, MouseRegion, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import type { Component, KeyId, TuiMouseEvent, TuiMouseEventResult } from "@earendil-works/pi-tui";
-import { readClipboardImage, type CommandRunner } from "../lib/clipboard.ts";
+import { quoteForShell, readClipboard, type CommandRunner } from "../lib/clipboard.ts";
 import { extensionForMime, savePastedImage, sniffImage } from "../lib/images.ts";
 import { buildOpenArgv, buildWslPathArgv, resolveOpenPlatform } from "../lib/open.ts";
 import {
@@ -37,7 +41,12 @@ import {
 } from "../lib/registry.ts";
 import { appendImageRefs, formatToken, nextDraftNumber, parseTokenNumbers } from "../lib/tokens.ts";
 
-const DEFAULT_SHORTCUT = "ctrl+shift+v";
+// ctrl+v is the default because that is the key users already paste with.
+// Taking Pi's built-in paste shortcut is safe here because this handler also
+// does what the built-in paste did — copied file paths, then an image, then
+// plain text — and the last extension to register a shortcut wins.
+// GENTLE_IMAGE_PREVIEW_SHORTCUT moves it (for example to ctrl+shift+v).
+const DEFAULT_SHORTCUT = "ctrl+v";
 const OPEN_TIMEOUT_MS = 5000;
 const PREVIEW_MAX_BYTES = 8 * 1024 * 1024;
 const WIDGET_KEY = "gentle-image-preview";
@@ -207,34 +216,47 @@ export default function (pi: ExtensionAPI) {
 		}
 	};
 
-	/** Reads the clipboard image and pastes a token; does nothing when unreadable. */
+	/** Pastes the clipboard the way Pi's built-in paste did, images as tokens. */
 	const pasteFromClipboard = (ctx: ExtensionContext): void => {
-		const image = readClipboardImage(runCommand, process.platform, process.env);
-		if (image === null) return;
-		const extension = extensionForMime(image.mimeType) ?? "png";
-		const path = savePastedImage(image.bytes, extension);
-		if (path === null) {
-			ctx.ui.notify("gentle-image-preview: could not save the pasted image", "error");
+		const content = readClipboard(runCommand, process.platform, process.env);
+		if (content === null) return; // nothing readable: never paste partial or empty text
+		if (content.kind === "image") {
+			const extension = extensionForMime(content.image.mimeType) ?? "png";
+			const path = savePastedImage(content.image.bytes, extension);
+			if (path === null) {
+				ctx.ui.notify("gentle-image-preview: could not save the pasted image", "error");
+				return;
+			}
+			// The number belongs to the draft, not to the session: a draft holding no
+			// image starts again at 1.
+			const number = nextDraftNumber(parseTokenNumbers(ctx.ui.getEditorText()));
+			const ref = registry.set(number, path, content.image.mimeType);
+			pi.appendEntry(IMAGE_REGISTRY_ENTRY_TYPE, registry.snapshot());
+			ctx.ui.pasteToEditor(formatToken(ref.number));
 			return;
 		}
-		// The number belongs to the draft, not to the session: a draft holding no
-		// image starts again at 1.
-		const number = nextDraftNumber(parseTokenNumbers(ctx.ui.getEditorText()));
-		const ref = registry.set(number, path, image.mimeType);
-		pi.appendEntry(IMAGE_REGISTRY_ENTRY_TYPE, registry.snapshot());
-		ctx.ui.pasteToEditor(formatToken(ref.number));
+		if (content.kind === "files") {
+			// Pi inserted copied file paths one per line, or space-joined and
+			// quoted when the editor was in bash mode (the draft starts with "!").
+			const bashMode = editorText(ctx).trimStart().startsWith("!");
+			const text = bashMode ? content.paths.map(quoteForShell).join(" ") : content.paths.join("\n");
+			ctx.ui.pasteToEditor(text);
+			return;
+		}
+		ctx.ui.pasteToEditor(content.text);
 	};
 
 	pi.on("session_start", async (_event, ctx) => {
 		// Rebuild from the branch: only our own entries, newest valid snapshot wins.
 		registry.resetFrom(ImageRegistry.fromSnapshot(rebuildSnapshotFromBranch(ctx.sessionManager.getBranch())));
 
-		// Shortcut override is read once per session start. Pointing the
-		// shortcut at ctrl+v opts into replacing Pi's built-in paste.
+		// Shortcut override is read once per session start. The default ctrl+v
+		// replaces Pi's built-in paste; the handler covers image, copied file
+		// paths and text, so no paste is lost by taking the shortcut.
 		const configured = process.env.GENTLE_IMAGE_PREVIEW_SHORTCUT?.trim();
 		const shortcut = (configured !== undefined && configured !== "" ? configured : DEFAULT_SHORTCUT) as KeyId;
 		pi.registerShortcut(shortcut, {
-			description: "Paste clipboard image as [Image #N] (gentle-image-preview)",
+			description: "Paste clipboard: image as [Image #N], file paths, or text (gentle-image-preview)",
 			handler: (shortcutCtx) => pasteFromClipboard(shortcutCtx),
 		});
 
@@ -317,13 +339,16 @@ export default function (pi: ExtensionAPI) {
 }
 
 /** Refs for the tokens present in the current editor draft, in draft order. */
-function currentDraftRefs(ctx: ExtensionContext, registry: ImageRegistry): ImageRef[] {
-	let draft: string;
+function editorText(ctx: ExtensionContext): string {
 	try {
-		draft = ctx.ui.getEditorText();
+		return ctx.ui.getEditorText();
 	} catch {
-		return [];
+		return "";
 	}
+}
+
+function currentDraftRefs(ctx: ExtensionContext, registry: ImageRegistry): ImageRef[] {
+	const draft = editorText(ctx);
 	const refs: ImageRef[] = [];
 	for (const n of parseTokenNumbers(draft)) {
 		const ref = registry.get(n);

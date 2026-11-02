@@ -1,6 +1,6 @@
 {
 	"name": "gentle-image-preview",
-	"version": "0.1.1",
+	"version": "0.2.1",
 	"description": "Number pasted images as [Image #N] and preview them, or read their real path, from inside a Pi or Gentle Shell session.",
 	"homepage": "https://github.com/efolchmontiel/gentle-preview/tree/main/packages/image-preview#readme",
 	"bugs": {

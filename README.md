@@ -5,7 +5,7 @@ Two plugins for [Pi Coding Agent](https://pi.dev) and Gentle Shell that let you 
 | Package | What it does |
 | --- | --- |
 | [`gentle-quick-peek`](packages/quick-peek) | Turns the file paths of a session into previews: a code file with its lines numbered and coloured and the named line lit, an image thumbnail, or the file's name, kind, size and age. Reveals the file in your file manager when you pick it. |
-| [`gentle-image-preview`](packages/image-preview) | Numbers a pasted image as `[Image #N]` instead of leaving a long path in the prompt, keeps the prompt short, and previews the picture (or shows its real path) when you hover the chip above the editor. |
+| [`gentle-image-preview`](packages/image-preview) | Pastes with `ctrl+v` by default (override with `GENTLE_IMAGE_PREVIEW_SHORTCUT`): a pasted image becomes a short `[Image #N]` token instead of a long path, copied file paths and text paste the way Pi's own paste did, and hovering the chip above the editor previews the picture or shows its real path. |
 
 Both are ports of the ideas in [midudev/better-claude](https://github.com/midudev/better-claude) quick-peek and image-preview, rebuilt on the Pi extension API rather than copied: Pi has no hook over the rendering of a built-in message, so interactions live in the plugin's own surface, with the keyboard as the primary path and the mouse as an addition in fullscreen.
 

@@ -74,8 +74,8 @@ ascending order:
 Look at this [Image #1] compared with [Image #2]
 
 [Image refs]
-[Image #1] = /home/you/Pictures/screenshots/pasted-2026….png
-[Image #2] = /home/you/Pictures/screenshots/pasted-2026….png
+[Image #1] = /home/you/Pictures/screenshots/screenshot-2026-11-02_15-05-41.png
+[Image #2] = /home/you/Pictures/screenshots/screenshot-2026-11-02_15-05-41.png
 ```
 
 Your own message text is never dropped or rewritten; the block is appended
@@ -83,32 +83,64 @@ after it. Unknown tokens produce no line.
 
 ## Paste shortcut
 
-- Default: `ctrl+shift+v` — deliberately **not** `ctrl+v`, which is Pi's
-  built-in clipboard paste (`app.clipboard.pasteImage`) and may already be
-  bound by another extension in your setup.
-- Override it once per session with an environment variable:
+This extension is meant to be the single owner of the paste shortcut. If you
+already had a paste extension installed — one that inserted a path and saved the
+clipboard image itself — disable it, otherwise both register the same key and Pi
+keeps whichever loads last:
+
+```json
+"extensions": ["-extensions/paste-image-to-screenshots.ts"]
+```
+
+The destination is never imposed: it is the folder you already configured, in
+this order — `GENTLE_IMAGE_PREVIEW_DIR`, `OMARCHY_SCREENSHOT_DIR`,
+`$XDG_PICTURES_DIR/screenshots`, an existing `~/Pictures/screenshots` — and only
+the bounded temp cache when none of them exists.
+
+
+- Default: `ctrl+v` — the key you already paste with. The shortcut replaces
+  Pi's built-in clipboard paste (`app.clipboard.pasteImage`), and that is safe
+  only because this handler also does what the built-in paste did: copied file
+  paths, then an image, then plain text. The last extension to register a
+  shortcut wins, so nothing of the old paste behaviour is lost.
+- Override it once per session with an environment variable — for example to
+  move it back out of the way:
 
   ```
-  GENTLE_IMAGE_PREVIEW_SHORTCUT=ctrl+alt+v pi
+  GENTLE_IMAGE_PREVIEW_SHORTCUT=ctrl+shift+v pi
   ```
 
-  Pointing it at `ctrl+v` explicitly opts into replacing Pi's built-in paste;
-  the last registered extension wins.
 - The environment variable is read at session start; changing it requires
   starting a new session (or restarting).
 
-### Clipboard backends (per platform)
+### What a paste does, in order
 
-The shortcut tries the available backends in order and **does nothing** when
-none can read an image, so Pi's own paste behaviour stays intact:
+The handler reads the clipboard once and takes the first thing it can read:
 
-- **macOS**: `pngpaste -` (homebrew), if installed.
-- **Windows**: PowerShell `System.Windows.Forms.Clipboard::GetImage`, saved as
-  PNG to a temp file.
-- **WSL**: the same PowerShell script through `powershell.exe` Windows interop,
-  with the path converted back via `wslpath -u`.
-- **Linux**: `wl-paste` (Wayland) then `xclip` (X11), for PNG and JPEG
-  payloads.
+1. **An image** — saved to your pictures folder and inserted as `[Image #N]`
+   (unchanged behaviour; see below for where it lands).
+2. **Copied file paths** — from a file-manager copy, inserted the way Pi
+   inserts them: one per line, or space-joined and quoted when the editor is
+   in bash mode (the draft starts with `!`).
+3. **Plain text** — inserted verbatim.
+4. **Nothing readable** — the editor stays untouched; no partial or empty
+   paste is ever inserted.
+
+### Clipboard coverage (per platform)
+
+| Platform              | Image                                          | Copied file paths                                                                                          | Text                                |
+| --------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| Linux · Wayland       | `wl-paste --list-types`, first valid image type | `x-special/gnome-copied-files` / `text/uri-list`                                                            | first `text/*` type                 |
+| Linux · X11           | `xclip -t TARGETS`, first valid image type     | same types as Wayland                                                                                       | same                                |
+| macOS                 | `pngpaste -` (homebrew)                        | **not covered** — Finder copies live on the native pasteboard and no bounded one-shot command returns them  | `pbpaste`                           |
+| Windows               | PowerShell `Clipboard::GetImage` → temp PNG    | `Get-Clipboard -Format FileDropList`                                                                        | `Get-Clipboard -Raw`                |
+| WSL                   | PowerShell via `powershell.exe`, path converted with `wslpath -u` | same, paths converted with `wslpath -u` (the raw Windows path is kept if conversion fails) | `Get-Clipboard -Raw` via `powershell.exe` — only what the Windows interop reaches |
+
+On Wayland the backend is selected by `WAYLAND_DISPLAY` or `WL_DISPLAY`; on
+X11 by `DISPLAY`. If neither is set, nothing is spawned and the paste does
+nothing. Image payloads are always validated by magic bytes before anything
+is saved; a payload that is not a recognisable PNG/JPEG/GIF/WebP falls through
+to the next category instead of being pasted as a broken image.
 
 ## Chip band above the editor
 
@@ -143,7 +175,10 @@ in the session with its absolute path.
 - The temp cache is the only directory this extension ever prunes. A folder you
 own is never cleaned, and an image identical to one already there reuses that
   file instead of writing a duplicate.
-- Files are named `pasted-<timestamp>.<ext>`.
+- Files are named with the convention the pictures folder already uses:
+  `screenshot-YYYY-MM-DD_HH-MM-SS.<ext>`, and `-2`, `-3` … when that name is
+  taken. A pasted image therefore sits next to the screenshots already there
+  instead of introducing a second naming scheme.
 - Inline previews are capped at 40×8 terminal cells and 8 MB per image; larger
   files show the path and dimensions only.
 - **The editor box itself cannot be hovered.** Pi routes mouse input only in
@@ -151,8 +186,9 @@ own is never cleaned, and an image identical to one already there reuses that
   fullscreen; in regular mode the band still renders (chips and shortcuts), and
   `/image-paths` covers lookup from the keyboard.
 - Clipboard reading requires the platform helper to be available (`pngpaste`,
-  `wl-paste`/`xclip`, or PowerShell); without one, pasting images through this
-  extension silently does nothing.
+  `wl-paste`/`xclip`, or PowerShell); without one, pasting through this
+  extension does nothing. macOS file copies are the one gap in the matrix
+  above (see the coverage table).
 
 ## Install
 

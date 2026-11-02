@@ -37,6 +37,9 @@ Concretamente: al pegar una imagen el editor recibe `[Image #N]` en lugar de la 
 Corrección L5 (numeración). Quote: "no respeto que si no tengo imagen dentro del inputo debe consdierarse nuevamente como el 1."
 Regla: el número pertenece al borrador, no a la sesión. Un borrador sin imágenes empieza en 1; dentro del borrador el siguiente número es uno más que el mayor token presente. El bloque `[Image refs]` se materializa en cada mensaje enviado, así el historial queda inequívoco aunque un número vuelva a usarse más tarde.
 
+Corrección L8 (atajo). Quote: "aprovecha de hacer la correccion que si los usuarios estan pegando con ctrl+v usar ese por defecto".
+Regla: `ctrl+v` es el atajo por defecto y `GENTLE_IMAGE_PREVIEW_SHORTCUT` sigue permitiendo moverlo. Tomar el atajo obliga a cubrir lo que hacía el pegado nativo de Pi, porque la última extensión que registra gana: imagen → `[Image #N]`, rutas de archivos copiados → sus rutas, texto → el texto, nada legible → nada. Ningún pegado se traga en silencio.
+
 Corrección L5 (destino). Quote: "luego de eso saque un screenshoot y me aparece en el tmp, no deberia estar segun yo".
 Regla: una imagen pegada no va al directorio temporal mientras exista una carpeta de imágenes real. Precedencia: `GENTLE_IMAGE_PREVIEW_DIR`, `OMARCHY_SCREENSHOT_DIR`, `$XDG_PICTURES_DIR/screenshots`, un `~/Pictures/screenshots` existente, y sólo entonces el cache temporal acotado. Sólo se poda el cache temporal; una imagen idéntica reutiliza el archivo que ya está en disco.
 
@@ -62,6 +65,7 @@ Regla: una imagen pegada no va al directorio temporal mientras exista una carpet
 | T12 | Repositorio público, issue-first, reglas de contribución y atribución | S2, S8 | inline | cc828c6 |
 | T13 | Publicación en npm (`gentle-quick-peek@0.1.0`, `gentle-image-preview@0.1.0`) y previews para el gallery de pi.dev | S3 | inline | 633b380 + npm |
 | T14 | Arreglo de los tests que asumían POSIX para que la matriz CI pase en Windows y macOS | S4, S8 | worker | ver L6 |
+| T15 | `image-preview`: `ctrl+v` por defecto con fallback de rutas y texto, versión 0.2.0 | S7, S4 | worker | ver L8 |
 
 ## Log
 
@@ -154,3 +158,9 @@ Resuelto en edc3746 (numeración por borrador, destino fuera del temporal) y ec2
 **L7 — Estrategia de entrega (frontera de slice).**
 
 La rama `feat/gentle-preview-plugins` acumula 17 commits y ~4470 líneas propias sobre `main`, muy por encima del slice de ~400. La entrega elegida es **un solo PR (#2)** porque es la implementación inicial completa y partirla en dos PRs encadenados exigiría reescribir la historia ya publicada; el cuerpo del PR deja constancia de que se puede reordenar en PRs encadenados (uno por paquete) si el dueño lo prefiere antes de revisar. Frontera registrada acá: `main` = 98d078c (scaffold + tooling + feature doc), PR #2 = todo lo demás, con cortes internos legibles: tooling y CI, `quick-peek` (modelo, capa OS, wiring y docs), `image-preview` (modelo, capa OS, wiring y docs), capturas y atribución. Todo commit posterior a esta nota debe ir en una rama nueva y un PR nuevo, no en #2.
+
+**L8 — `ctrl+v` por defecto (verbatim).**
+
+> aprovecha de hacer la correccion que si los usuarios estan pegando con ctrl+v usar ese por defecto, y que dependiendo la ruta que se este usando pega con /tmp/ o en donde tiene el screenshoot, por ejemplo nosotros lo tenemos en ctrl+v en la ruta /home/erickfm/Pictures/screenshots/ al presionar ctrl+v
+
+Decisión: el atajo por defecto pasa a `ctrl+v` y el handler cubre imagen, rutas de archivos copiados y texto, para no romper el pegado que antes hacía Pi. El destino ya resolvía a `/home/erickfm/Pictures/screenshots` en esta máquina (por `OMARCHY_SCREENSHOT_DIR`) y no se toca; `/tmp` queda sólo como último recurso cuando no existe ninguna carpeta de imágenes. Rama `feat/ctrl-v-default`, stacked sobre `fix/package-metadata`; issue #5. Frontera de slice de esta rama: sólo `packages/image-preview/**` y la línea del README raíz que documentaba el atajo viejo.

@@ -247,30 +247,53 @@ function findSameImage(dir: string, bytes: Uint8Array): string | null {
 	return null;
 }
 
+const pad2 = (value: number): string => String(value).padStart(2, "0");
+
+/** How many `-2`, `-3` … suffixes to try before giving up on a free name. */
+const MAX_NAME_ATTEMPTS = 100;
+
 /**
- * Writes a pasted image as `pasted-<timestamp>-<rand>.<ext>` and returns its
- * absolute path, reusing an existing file with identical bytes. The bounded
- * pruning only ever runs in the temporary fallback, never in a folder the user
- * owns. Returns null when the payload is too large or writing fails.
+ * `YYYY-MM-DD_HH-MM-SS` in local time: the shape the screenshots already in the
+ * user's pictures folder use, so pasting does not introduce a second naming
+ * convention next to them.
+ */
+export function screenshotTimestamp(date: Date): string {
+	return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}_${pad2(date.getHours())}-${pad2(date.getMinutes())}-${pad2(date.getSeconds())}`;
+}
+
+/** `screenshot-<timestamp>.<ext>`, or `screenshot-<timestamp>-<n>.<ext>` when taken. */
+export function screenshotFileName(date: Date, extension: string, attempt = 1): string {
+	const base = `screenshot-${screenshotTimestamp(date)}`;
+	return attempt <= 1 ? `${base}.${extension}` : `${base}-${attempt}.${extension}`;
+}
+
+/**
+ * Writes a pasted image as `screenshot-<timestamp>.<ext>` and returns its
+ * absolute path, reusing an existing file with identical bytes and adding a
+ * `-2`, `-3` … suffix when that name is taken. The bounded pruning only ever
+ * runs in the temporary fallback, never in a folder the user owns. Returns null
+ * when the payload is too large or writing fails.
  */
 export function savePastedImage(
 	bytes: Uint8Array,
 	extension: string,
-	options: { context?: PasteDirContext; now?: () => Date; random?: () => string } = {},
+	options: { context?: PasteDirContext; now?: () => Date } = {},
 ): string | null {
 	if (bytes.length > MAX_CACHE_FILE_BYTES) return null;
 	const { dir, temporary } = pasteDir(options.context);
 	const now = options.now ?? (() => new Date());
-	const random = options.random ?? (() => Math.random().toString(36).slice(2, 10));
 	try {
 		mkdirSync(dir, { recursive: true });
 		const existing = findSameImage(dir, bytes);
 		if (existing !== null) return existing;
-		const name = `pasted-${now().toISOString().replace(/[:.]/g, "-")}-${random()}.${extension}`;
-		const target = join(dir, name);
-		writeFileSync(target, bytes);
-		if (temporary) enforceCacheLimit(dir);
-		return target;
+		for (let attempt = 1; attempt <= MAX_NAME_ATTEMPTS; attempt += 1) {
+			const target = join(dir, screenshotFileName(now(), extension, attempt));
+			if (existsSync(target)) continue;
+			writeFileSync(target, bytes);
+			if (temporary) enforceCacheLimit(dir);
+			return target;
+		}
+		return null;
 	} catch {
 		return null;
 	}
@@ -279,7 +302,7 @@ export function savePastedImage(
 function enforceCacheLimit(dir: string): void {
 	let entries: string[];
 	try {
-		entries = readdirSync(dir).filter((name) => name.startsWith("pasted-"));
+		entries = readdirSync(dir).filter((name) => name.startsWith("screenshot-") || name.startsWith("pasted-"));
 	} catch {
 		return;
 	}
