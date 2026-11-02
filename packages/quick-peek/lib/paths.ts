@@ -8,7 +8,7 @@
 
 import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, resolve } from "node:path";
+import * as hostPath from "node:path";
 
 /** A file path candidate found in text. */
 export interface PathRef {
@@ -25,6 +25,9 @@ export interface PathRef {
 	isDirectory: boolean;
 }
 
+/** Path operations used to resolve candidates: the host flavour by default. */
+export type PathFlavour = Pick<typeof hostPath, "isAbsolute" | "resolve" | "sep">;
+
 /** Resolution inputs; every probe is injectable for tests. */
 export interface PathResolutionContext {
 	/** Session working directory: first resolution target for relative paths. */
@@ -33,6 +36,12 @@ export interface PathResolutionContext {
 	home?: string;
 	/** Project root: second resolution target for relative paths. */
 	root?: string;
+	/**
+	 * Path flavour for `resolve`/`isAbsolute`; defaults to the host platform's
+	 * `node:path`. Inject `path.win32` to exercise Windows resolution from any
+	 * OS (and `path.posix` for the POSIX flavour).
+	 */
+	path?: PathFlavour;
 	exists?: (path: string) => boolean;
 	isDirectory?: (path: string) => boolean;
 }
@@ -104,6 +113,7 @@ export function extractPathTokens(text: string): string[] {
 /** Resolve one path part against home, cwd, then the project root. */
 export function resolvePathPart(part: string, ctx: PathResolutionContext): { path: string; resolved: boolean } {
 	const exists = ctx.exists ?? existsSync;
+	const pathOps: PathFlavour = ctx.path ?? hostPath;
 	const usable = (p: string): boolean => {
 		try {
 			return exists(p);
@@ -117,19 +127,19 @@ export function resolvePathPart(part: string, ctx: PathResolutionContext): { pat
 		return { path: home, resolved: usable(home) };
 	}
 	if (part.startsWith("~/") || part.startsWith("~\\")) {
-		const candidate = resolve(ctx.home ?? homedir(), part.slice(2));
+		const candidate = pathOps.resolve(ctx.home ?? homedir(), part.slice(2));
 		return { path: candidate, resolved: usable(candidate) };
 	}
-	if (isAbsolute(part) || /^[A-Za-z]:[\\/]/.test(part)) {
-		const candidate = resolve(part);
+	if (pathOps.isAbsolute(part) || /^[A-Za-z]:[\\/]/.test(part)) {
+		const candidate = pathOps.resolve(part);
 		return { path: candidate, resolved: usable(candidate) };
 	}
-	const inCwd = resolve(ctx.cwd, part);
+	const inCwd = pathOps.resolve(ctx.cwd, part);
 	if (usable(inCwd)) {
 		return { path: inCwd, resolved: true };
 	}
-	if (ctx.root && resolve(ctx.root) !== resolve(ctx.cwd)) {
-		const inRoot = resolve(ctx.root, part);
+	if (ctx.root && pathOps.resolve(ctx.root) !== pathOps.resolve(ctx.cwd)) {
+		const inRoot = pathOps.resolve(ctx.root, part);
 		if (usable(inRoot)) {
 			return { path: inRoot, resolved: true };
 		}
