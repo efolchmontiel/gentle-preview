@@ -12,7 +12,8 @@ import {
 	parseJpegSize,
 	parsePngSize,
 	parseWebpSize,
-	savePasteToCache,
+	pasteDir,
+	savePastedImage,
 	sniffImage,
 } from "../lib/images.ts";
 
@@ -126,35 +127,105 @@ test("extension and path helpers", () => {
 
 const PNG_BYTES = pngBytes(2, 2);
 
-test("savePasteToCache writes into a bounded cache dir under os.tmpdir()", () => {
-	const tmpDir = join(tmpdir(), `gentle-preview-cache-test-${process.pid}`);
-	const path = savePasteToCache(PNG_BYTES, "png", {
-		tmpDir,
+test("pasteDir prefers the configured folder over every fallback", () => {
+	assert.deepEqual(
+		pasteDir({
+			env: { GENTLE_IMAGE_PREVIEW_DIR: "/pics", OMARCHY_SCREENSHOT_DIR: "/shots", XDG_PICTURES_DIR: "/xdg" },
+			home: "/home/u",
+			exists: () => true,
+		}),
+		{ dir: "/pics", temporary: false },
+	);
+});
+
+test("pasteDir follows the Omarchy, XDG and conventional fallbacks in order", () => {
+	assert.deepEqual(pasteDir({ env: { OMARCHY_SCREENSHOT_DIR: "/shots" }, home: "/home/u", exists: () => true }), {
+		dir: "/shots",
+		temporary: false,
+	});
+	assert.deepEqual(pasteDir({ env: { XDG_PICTURES_DIR: "/xdg" }, home: "/home/u", exists: () => true }), {
+		dir: join("/xdg", "screenshots"),
+		temporary: false,
+	});
+	const conventional = join("/home/u", "Pictures", "screenshots");
+	assert.deepEqual(
+		pasteDir({ env: {}, home: "/home/u", exists: (path) => path === conventional }),
+		{ dir: conventional, temporary: false },
+	);
+});
+
+test("pasteDir falls back to a bounded temp cache when no folder is available", () => {
+	assert.deepEqual(pasteDir({ env: {}, home: "/home/u", exists: () => false, tmpDir: "/tmp/x" }), {
+		dir: join("/tmp/x", "gentle-preview-paste"),
+		temporary: true,
+	});
+});
+
+test("savePastedImage writes into a user folder and never prunes it", () => {
+	const dir = join(tmpdir(), `gentle-preview-userdir-${process.pid}`);
+	mkdirSync(dir, { recursive: true });
+	const context = { env: { GENTLE_IMAGE_PREVIEW_DIR: dir } };
+	for (let i = 0; i < 205; i += 1) {
+		// Two distinct bytes per write so the duplicate search never collapses them.
+		const path = savePastedImage(Buffer.from([i % 256, Math.floor(i / 256)]), "png", {
+			context,
+			now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, i)),
+			random: () => `n${i}`,
+		});
+		assert.ok(path !== null);
+	}
+	// MAX_CACHE_FILES is 200; a user folder keeps everything.
+	assert.equal(readdirSync(dir).length, 205);
+});
+
+test("savePastedImage reuses a file that already holds the same bytes", () => {
+	const dir = join(tmpdir(), `gentle-preview-dedupe-${process.pid}`);
+	const context = { env: { GENTLE_IMAGE_PREVIEW_DIR: dir } };
+	const first = savePastedImage(PNG_BYTES, "png", {
+		context,
+		now: () => new Date("2026-01-01T00:00:00.000Z"),
+		random: () => "a",
+	});
+	const second = savePastedImage(PNG_BYTES, "png", {
+		context,
+		now: () => new Date("2026-01-01T00:00:05.000Z"),
+		random: () => "b",
+	});
+	assert.ok(first !== null);
+	assert.equal(second, first);
+	assert.equal(readdirSync(dir).length, 1);
+});
+
+test("savePastedImage names the file after the paste and keeps its bytes", () => {
+	const dir = join(tmpdir(), `gentle-preview-name-${process.pid}`);
+	const path = savePastedImage(PNG_BYTES, "png", {
+		context: { env: { GENTLE_IMAGE_PREVIEW_DIR: dir } },
 		now: () => new Date("2026-01-01T00:00:00.000Z"),
 		random: () => "abc",
 	});
-	assert.ok(path?.startsWith(tmpDir));
-	assert.ok(path?.endsWith("paste-2026-01-01T00-00-00-000Z-abc.png"));
-	const bytes = readFileSync(path ?? "");
-	assert.equal(bytes.length, PNG_BYTES.length);
+	assert.equal(path, join(dir, "pasted-2026-01-01T00-00-00-000Z-abc.png"));
+	assert.equal(readFileSync(path ?? "").length, PNG_BYTES.length);
 });
 
-test("savePasteToCache evicts the oldest pastes beyond the limit", () => {
-	const tmpDir = join(tmpdir(), `gentle-preview-cache-evict-test-${process.pid}`);
-	mkdirSync(tmpDir, { recursive: true });
-	let counter = 0;
-	for (let i = 0; i < 202; i++) {
-		counter += 1;
-		savePasteToCache(Buffer.from([i % 256]), "png", {
-			tmpDir,
-			now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, counter)),
-			random: () => `n${counter}`,
+test("savePastedImage keeps the temporary cache bounded", () => {
+	const tmpDir = join(tmpdir(), `gentle-preview-cache-${process.pid}`);
+	const context = { env: {}, home: join(tmpDir, "home"), exists: () => false, tmpDir };
+	for (let i = 0; i < 202; i += 1) {
+		savePastedImage(Buffer.from([i % 256, Math.floor(i / 256)]), "png", {
+			context,
+			now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, i)),
+			random: () => `n${i}`,
 		});
 	}
 	const cacheDir = join(tmpDir, "gentle-preview-paste");
-	assert.equal(readdirSync(cacheDir).filter((name) => name.startsWith("paste-")).length, 200);
+	assert.equal(readdirSync(cacheDir).filter((name) => name.startsWith("pasted-")).length, 200);
 });
 
-test("savePasteToCache refuses oversized payloads", () => {
-	assert.equal(savePasteToCache(Buffer.alloc(MAX_CACHE_FILE_BYTES + 1), "png", { tmpDir: join(tmpdir(), `gentle-preview-oversize-${process.pid}`) }), null);
+test("savePastedImage refuses oversized payloads", () => {
+	assert.equal(
+		savePastedImage(Buffer.alloc(MAX_CACHE_FILE_BYTES + 1), "png", {
+			context: { env: { GENTLE_IMAGE_PREVIEW_DIR: join(tmpdir(), `gentle-preview-oversize-${process.pid}`) } },
+		}),
+		null,
+	);
 });

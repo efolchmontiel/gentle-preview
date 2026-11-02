@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { appendImageRefs, buildImageRefsBlock, formatToken, IMAGE_REFS_HEADER, parseTokenNumbers } from "../lib/tokens.ts";
+import { appendImageRefs, buildImageRefsBlock, formatToken, IMAGE_REFS_HEADER, nextDraftNumber, parseTokenNumbers } from "../lib/tokens.ts";
 
 test("formatToken renders [Image #N]", () => {
 	assert.equal(formatToken(1), "[Image #1]");
@@ -40,4 +40,16 @@ test("appendImageRefs preserves the body verbatim and appends the block", () => 
 test("appendImageRefs without refs returns the text unchanged", () => {
 	const body = "just text";
 	assert.equal(appendImageRefs(body, []), body);
+});
+
+test("nextDraftNumber starts again at 1 when the draft holds no image", () => {
+	assert.equal(nextDraftNumber([]), 1);
+});
+
+test("nextDraftNumber continues above the highest token in the draft", () => {
+	assert.equal(nextDraftNumber([1]), 2);
+	assert.equal(nextDraftNumber([1, 2]), 3);
+	// A gap is not filled: the highest number in the draft wins.
+	assert.equal(nextDraftNumber([2]), 3);
+	assert.equal(nextDraftNumber([1, 3]), 4);
 });

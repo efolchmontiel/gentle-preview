@@ -1,13 +1,13 @@
 /**
  * Image file helpers: detection by magic bytes and extension, MIME types,
- * header-based dimensions, and the bounded cache directory for saved pastes.
+ * header-based dimensions, and where a pasted image is written.
  *
  * All parsers are pure functions over byte buffers so they can be tested
  * without a terminal, a filesystem or a real image.
  */
 
-import { mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 export interface SniffedImage {
@@ -165,37 +165,111 @@ export function sniffImage(bytes: Uint8Array): SniffedImage | null {
 	return null;
 }
 
-/** Upper bound on how many paste files the cache directory keeps. */
+/** Upper bound on how many paste files the temporary cache keeps. */
 const MAX_CACHE_FILES = 200;
-/** Hard cap for a single cached paste; larger payloads are still pasted but not cached. */
+/** Hard cap for a single pasted image; larger payloads are refused. */
 export const MAX_CACHE_FILE_BYTES = 64 * 1024 * 1024;
+/** How many same-size candidates a duplicate search compares byte by byte. */
+const DEDUPE_MAX_CANDIDATES = 50;
+/** Extensions the duplicate search considers. */
+const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif"] as const;
 
-/** Absolute path of the bounded cache directory under `os.tmpdir()`. */
-export function pasteCacheDir(tmpDir: string = tmpdir()): string {
-	return join(tmpDir, "gentle-preview-paste");
+export interface PasteDirContext {
+	env?: Record<string, string | undefined>;
+	home?: string;
+	exists?: (path: string) => boolean;
+	/** Overrides `os.tmpdir()` for the fallback, so tests never touch the shared cache. */
+	tmpDir?: string;
+}
+
+export interface PasteDir {
+	dir: string;
+	/** True for the `os.tmpdir()` fallback, the only directory this module prunes. */
+	temporary: boolean;
 }
 
 /**
- * Writes `bytes` into the cache directory as `paste-<timestamp>-<rand>.<ext>`
- * and returns its absolute path. Keeps at most `MAX_CACHE_FILES` files by
- * removing the oldest ones. Returns null when the payload exceeds the cache
- * cap or writing fails, so the caller can degrade gracefully.
+ * Where a pasted image is written.
+ *
+ * A pasted image is something the user refers to again, so it does not belong in
+ * the system temp dir while a real pictures folder is available. Order:
+ * `GENTLE_IMAGE_PREVIEW_DIR`, the Omarchy screenshots folder,
+ * `$XDG_PICTURES_DIR/screenshots`, an existing `~/Pictures/screenshots`, and
+ * only then a bounded cache under `os.tmpdir()`.
  */
-export function savePasteToCache(
+export function pasteDir(context: PasteDirContext = {}): PasteDir {
+	const env = context.env ?? process.env;
+	const home = context.home ?? homedir();
+	const exists = context.exists ?? ((path: string) => existsSync(path));
+	const configured = env.GENTLE_IMAGE_PREVIEW_DIR?.trim();
+	if (configured) return { dir: configured, temporary: false };
+	const omarchy = env.OMARCHY_SCREENSHOT_DIR?.trim();
+	if (omarchy) return { dir: omarchy, temporary: false };
+	const pictures = env.XDG_PICTURES_DIR?.trim();
+	if (pictures) return { dir: join(pictures, "screenshots"), temporary: false };
+	const conventional = join(home, "Pictures", "screenshots");
+	if (exists(conventional)) return { dir: conventional, temporary: false };
+	return { dir: join(context.tmpDir ?? tmpdir(), "gentle-preview-paste"), temporary: true };
+}
+
+/**
+ * Returns a file in `dir` whose bytes equal `bytes`, or null. Only the newest
+ * `DEDUPE_MAX_CANDIDATES` files of the same size are read, so a folder full of
+ * screenshots stays cheap to search.
+ */
+function findSameImage(dir: string, bytes: Uint8Array): string | null {
+	let names: string[];
+	try {
+		names = readdirSync(dir);
+	} catch {
+		return null;
+	}
+	const candidates: Array<{ path: string; mtimeMs: number }> = [];
+	for (const name of names) {
+		const lower = name.toLowerCase();
+		if (!IMAGE_EXTENSIONS.some((extension) => lower.endsWith(extension))) continue;
+		const path = join(dir, name);
+		try {
+			const stat = statSync(path);
+			if (stat.isFile() && stat.size === bytes.length) candidates.push({ path, mtimeMs: stat.mtimeMs });
+		} catch {
+			// Ignore entries that disappear between listing and stat.
+		}
+	}
+	candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+	for (const candidate of candidates.slice(0, DEDUPE_MAX_CANDIDATES)) {
+		try {
+			if (readFileSync(candidate.path).equals(bytes)) return candidate.path;
+		} catch {
+			// Unreadable candidate: keep looking.
+		}
+	}
+	return null;
+}
+
+/**
+ * Writes a pasted image as `pasted-<timestamp>-<rand>.<ext>` and returns its
+ * absolute path, reusing an existing file with identical bytes. The bounded
+ * pruning only ever runs in the temporary fallback, never in a folder the user
+ * owns. Returns null when the payload is too large or writing fails.
+ */
+export function savePastedImage(
 	bytes: Uint8Array,
 	extension: string,
-	options: { tmpDir?: string; now?: () => Date; random?: () => string } = {},
+	options: { context?: PasteDirContext; now?: () => Date; random?: () => string } = {},
 ): string | null {
 	if (bytes.length > MAX_CACHE_FILE_BYTES) return null;
-	const dir = pasteCacheDir(options.tmpDir);
+	const { dir, temporary } = pasteDir(options.context);
 	const now = options.now ?? (() => new Date());
 	const random = options.random ?? (() => Math.random().toString(36).slice(2, 10));
-	const name = `paste-${now().toISOString().replace(/[:.]/g, "-")}-${random()}.${extension}`;
-	const target = join(dir, name);
 	try {
 		mkdirSync(dir, { recursive: true });
+		const existing = findSameImage(dir, bytes);
+		if (existing !== null) return existing;
+		const name = `pasted-${now().toISOString().replace(/[:.]/g, "-")}-${random()}.${extension}`;
+		const target = join(dir, name);
 		writeFileSync(target, bytes);
-		enforceCacheLimit(dir);
+		if (temporary) enforceCacheLimit(dir);
 		return target;
 	} catch {
 		return null;
@@ -205,7 +279,7 @@ export function savePasteToCache(
 function enforceCacheLimit(dir: string): void {
 	let entries: string[];
 	try {
-		entries = readdirSync(dir).filter((name) => name.startsWith("paste-"));
+		entries = readdirSync(dir).filter((name) => name.startsWith("pasted-"));
 	} catch {
 		return;
 	}

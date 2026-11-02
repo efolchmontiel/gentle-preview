@@ -2,16 +2,18 @@
  * Session-scoped registry mapping image numbers to pasted image files.
  *
  * The registry is persisted through `pi.appendEntry()` as a full snapshot per
- * allocation, and rebuilt on `session_start` from the current session branch.
- * Numbers are allocated incrementally and are never reused within a session,
- * even after a reload or a branch switch.
+ * write, and rebuilt on `session_start` from the current session branch.
+ * A number belongs to the prompt draft that used it: a draft with no images
+ * starts again at 1, so a number is reused rather than reserved for a whole
+ * session. Every sent prompt carries its own `[Image refs]` block, so the
+ * history stays unambiguous even when a number is used again later.
  */
 
 /** `customType` used for the persisted registry entries. */
 export const IMAGE_REGISTRY_ENTRY_TYPE = "gentle-image-preview.registry";
 
 export interface ImageRef {
-	/** Image number, 1-based, never reused within a session. */
+	/** Image number, 1-based, scoped to the prompt draft that used it. */
 	number: number;
 	/** Absolute path of the image file on disk. */
 	path: string;
@@ -24,7 +26,7 @@ export interface ImageRef {
 /** Serialisation shape stored in a `CustomEntry`. */
 export interface RegistrySnapshot {
 	version: 1;
-	/** Next number to allocate; strictly greater than every stored number. */
+	/** Next number a draft would use; never below any stored number. */
 	nextNumber: number;
 	images: ImageRef[];
 }
@@ -66,11 +68,21 @@ export class ImageRegistry {
 		this.nextNumber = Math.max(nextNumber ?? 1, maxStored + 1);
 	}
 
-	/** Registers an image and returns its ref with the freshly allocated number. */
-	allocate(path: string, mimeType: string, addedAt: string = new Date().toISOString()): ImageRef {
-		const ref: ImageRef = { number: this.nextNumber, path, mimeType, addedAt };
-		this.nextNumber += 1;
-		this.images.push(ref);
+	/**
+	 * Records `path` under `number`, replacing any earlier ref for that number.
+	 * The caller picks the number from the current draft, not from a session
+	 * counter.
+	 */
+	set(number: number, path: string, mimeType: string, addedAt: string = new Date().toISOString()): ImageRef {
+		const ref: ImageRef = { number, path, mimeType, addedAt };
+		const index = this.images.findIndex((existing) => existing.number === number);
+		if (index === -1) {
+			this.images.push(ref);
+			this.images.sort((a, b) => a.number - b.number);
+		} else {
+			this.images[index] = ref;
+		}
+		this.nextNumber = Math.max(this.nextNumber, number + 1);
 		return ref;
 	}
 
@@ -113,8 +125,8 @@ export interface BranchEntryLike {
  * Rebuilds the registry state from the session branch.
  *
  * Not a blind replay: only the entries of our own `customType` are inspected,
- * the newest valid snapshot wins, and `nextNumber` is clamped to stay above
- * every number ever seen in any snapshot so a number is never reused.
+ * the newest valid snapshot wins, and `nextNumber` is clamped above every number
+ * ever seen so a restored snapshot never disagrees with the data it holds.
  */
 export function rebuildSnapshotFromBranch(entries: readonly BranchEntryLike[]): ImageRegistry {
 	let latest: RegistrySnapshot | undefined;

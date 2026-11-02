@@ -8,8 +8,8 @@ they point at.
 
 Pasting an image from the clipboard normally inserts a long temp-file path into
 the editor. With this extension, the paste shortcut saves the clipboard image
-to a bounded cache directory, allocates the next image number **for the
-session** (1, 2, 3, …, never reused), and inserts a compact token instead:
+to your pictures folder (or a bounded temp cache when there is none) and inserts
+a compact token instead, numbered inside the draft (1, 2, 3, …):
 
 ```
 Look at this [Image #1] compared with [Image #2]
@@ -21,8 +21,11 @@ branch.
 
 ## The `[Image #N]` token
 
-- `N` is allocated incrementally per session starting at 1; a number is never
-  reused within a session, even after reload or restore.
+- `N` belongs to the prompt draft, not to the session: a draft that holds no
+  image starts again at 1, so the next paste after you clear the editor is
+  `[Image #1]` once more. Inside a draft the number always continues above the
+  highest token already there. Every sent prompt carries its own refs block, so
+  the history stays unambiguous even when a number is used again later.
 - The token is plain text. Tokens whose mapping is unknown (for example, text
   you typed yourself) are left verbatim and simply have no entry in the refs
   block.
@@ -37,8 +40,8 @@ ascending order:
 Look at this [Image #1] compared with [Image #2]
 
 [Image refs]
-[Image #1] = /tmp/gentle-preview-paste/paste-2026….png
-[Image #2] = /tmp/gentle-preview-paste/paste-2026….png
+[Image #1] = /home/you/Pictures/screenshots/pasted-2026….png
+[Image #2] = /home/you/Pictures/screenshots/pasted-2026….png
 ```
 
 Your own message text is never dropped or rewritten; the block is appended
@@ -98,8 +101,15 @@ in the session with its absolute path.
 
 ## Storage and limits
 
-- Pasted images are written to a bounded cache directory under `os.tmpdir()`
-  (`gentle-preview-paste/`, at most 200 files, oldest evicted).
+- A pasted image is something you refer to again, so it does not go to the temp
+  dir while a real pictures folder exists. Destination, first match wins:
+  `GENTLE_IMAGE_PREVIEW_DIR`, `OMARCHY_SCREENSHOT_DIR`,
+  `$XDG_PICTURES_DIR/screenshots`, an existing `~/Pictures/screenshots`, and
+  only then `$TMPDIR/gentle-preview-paste/` (at most 200 files, oldest evicted).
+- The temp cache is the only directory this extension ever prunes. A folder you
+own is never cleaned, and an image identical to one already there reuses that
+  file instead of writing a duplicate.
+- Files are named `pasted-<timestamp>.<ext>`.
 - Inline previews are capped at 40×8 terminal cells and 8 MB per image; larger
   files show the path and dimensions only.
 - **The editor box itself cannot be hovered.** Pi routes mouse input only in

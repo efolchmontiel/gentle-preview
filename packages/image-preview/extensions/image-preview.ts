@@ -26,7 +26,7 @@ import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-c
 import { detectCapabilities, Image, MouseRegion, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import type { Component, KeyId, TuiMouseEvent, TuiMouseEventResult } from "@earendil-works/pi-tui";
 import { readClipboardImage, type CommandRunner } from "../lib/clipboard.ts";
-import { extensionForMime, savePasteToCache, sniffImage } from "../lib/images.ts";
+import { extensionForMime, savePastedImage, sniffImage } from "../lib/images.ts";
 import { buildOpenArgv, buildWslPathArgv, resolveOpenPlatform } from "../lib/open.ts";
 import {
 	IMAGE_REGISTRY_ENTRY_TYPE,
@@ -35,7 +35,7 @@ import {
 	type ImageRef,
 	type RegistrySnapshot,
 } from "../lib/registry.ts";
-import { appendImageRefs, formatToken, parseTokenNumbers } from "../lib/tokens.ts";
+import { appendImageRefs, formatToken, nextDraftNumber, parseTokenNumbers } from "../lib/tokens.ts";
 
 const DEFAULT_SHORTCUT = "ctrl+shift+v";
 const OPEN_TIMEOUT_MS = 5000;
@@ -212,12 +212,15 @@ export default function (pi: ExtensionAPI) {
 		const image = readClipboardImage(runCommand, process.platform, process.env);
 		if (image === null) return;
 		const extension = extensionForMime(image.mimeType) ?? "png";
-		const path = savePasteToCache(image.bytes, extension);
+		const path = savePastedImage(image.bytes, extension);
 		if (path === null) {
 			ctx.ui.notify("gentle-image-preview: could not save the pasted image", "error");
 			return;
 		}
-		const ref = registry.allocate(path, image.mimeType);
+		// The number belongs to the draft, not to the session: a draft holding no
+		// image starts again at 1.
+		const number = nextDraftNumber(parseTokenNumbers(ctx.ui.getEditorText()));
+		const ref = registry.set(number, path, image.mimeType);
 		pi.appendEntry(IMAGE_REGISTRY_ENTRY_TYPE, registry.snapshot());
 		ctx.ui.pasteToEditor(formatToken(ref.number));
 	};

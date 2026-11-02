@@ -18,6 +18,15 @@ export function formatToken(number: number): string {
 }
 
 /**
+ * Number for a fresh paste in the current draft: 1 when the draft holds no
+ * image, otherwise one above the highest token already there. A number belongs
+ * to the draft it was written in, so emptying the draft starts again at 1.
+ */
+export function nextDraftNumber(numbers: readonly number[]): number {
+	return numbers.length === 0 ? 1 : Math.max(...numbers) + 1;
+}
+
+/**
  * Returns the image numbers appearing in `text`, in order of first appearance,
  * deduplicated. Unknown or malformed text around tokens is irrelevant here;
  * only exact `[Image #N]` sequences match.
