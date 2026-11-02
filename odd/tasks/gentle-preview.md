@@ -27,10 +27,18 @@ pi install npm:gentle-image-preview
 
 **S6 — Quick Peek.** Port pi-nativo (decisión L2), con la fidelidad funcional del original: desde la sesión en curso, una ruta de archivo se puede inspeccionar sin abrirla — un archivo de código muestra sus líneas numeradas y coloreadas, con la línea `:N` iluminada; una imagen, video o documento muestra su thumbnail; y siempre se ven nombre, tipo, tamaño y antigüedad. Un click abre el archivo en el visor del sistema o el file manager con el archivo seleccionado. Debe haber camino de teclado siempre, y hover de mouse en fullscreen.
 Restricciones de plataforma que la spec hereda (evidencia E3): Pi no expone render de mensajes built-in, así que el peek no se dispara por hover sobre la respuesta del asistente sino desde una superficie propia de la extensión.
+Corrección L5 (orden de la lista). Quote: "me muestra 4 incluyendome la carpeta packages/quick-peek/lib cuando solo dije nmobrame 3 archivos".
+Regla: una respuesta que nombra una carpeta junto a sus archivos no debe hacer que la carpeta parezca un archivo más. Los archivos se listan antes que los directorios, dentro de cada grupo se conserva el orden de aparición, y un directorio se marca con `/` final.
 
 **S7 — Image Preview.** Actúa sobre rutas de imagen en el prompt en edición y en el transcript.
 Quote (requisito del usuario): "quiero usar el recomendado pero cuando pegamos una imagen la idea es que vaya teniendo esta estructura [Image #N], la idea es reducir tamaño de escritura y que sea entendible image #1 con la image#2, y asi sucecivamente, adicionalmente otra funcionalidad, es que si posicionamos el mouse en [Image #N] podemos la ruta para identificar nosotros como usuarios cual era la imagen o ruta o bien la previsualizacion."
-Concretamente: al pegar una imagen el editor recibe `[Image #N]` (N incremental por sesión, empezando en 1) en lugar de la ruta completa; la ruta real queda asociada a ese N; el modelo debe poder resolver cada `[Image #N]` a su archivo; y poner el puntero sobre ese `[Image #N]` (en la banda sobre el editor) revela la ruta o la preview.
+Concretamente: al pegar una imagen el editor recibe `[Image #N]` en lugar de la ruta completa; la ruta real queda asociada a ese N; el modelo debe poder resolver cada `[Image #N]` a su archivo; y poner el puntero sobre ese `[Image #N]` (en la banda sobre el editor) revela la ruta o la preview.
+
+Corrección L5 (numeración). Quote: "no respeto que si no tengo imagen dentro del inputo debe consdierarse nuevamente como el 1."
+Regla: el número pertenece al borrador, no a la sesión. Un borrador sin imágenes empieza en 1; dentro del borrador el siguiente número es uno más que el mayor token presente. El bloque `[Image refs]` se materializa en cada mensaje enviado, así el historial queda inequívoco aunque un número vuelva a usarse más tarde.
+
+Corrección L5 (destino). Quote: "luego de eso saque un screenshoot y me aparece en el tmp, no deberia estar segun yo".
+Regla: una imagen pegada no va al directorio temporal mientras exista una carpeta de imágenes real. Precedencia: `GENTLE_IMAGE_PREVIEW_DIR`, `OMARCHY_SCREENSHOT_DIR`, `$XDG_PICTURES_DIR/screenshots`, un `~/Pictures/screenshots` existente, y sólo entonces el cache temporal acotado. Sólo se poda el cache temporal; una imagen idéntica reutiliza el archivo que ya está en disco.
 
 **S8 — Verificación.** CI matriz en GitHub Actions sobre `ubuntu-latest`, `windows-latest` y `macos-latest` (unit tests, typecheck, pack dry-run) más prueba manual del usuario en Windows, WSL y macOS (decisión L2). Los casos que dependen del emulador real de terminal y del puntero no se declaran verificados sin esa prueba.
 
@@ -49,6 +57,8 @@ Concretamente: al pegar una imagen el editor recibe `[Image #N]` (N incremental 
 | T7 | Tests unitarios por paquete y CI matriz ubuntu/windows/macos | S8 | inline | 12bdf8e |
 | T8 | `gs-lab`: launcher aislado y corrida de verificación en Omarchy con evidencia | S9 | inline | parcial — launcher fuera del repo; ver L4 |
 | T9 | Cierre: reporte, plataformas sin verificar, decisión de publicación en npm | S8 | inline | ver L4 |
+| T10 | `image-preview`: numeración por borrador y destino de la imagen pegada fuera de `os.tmpdir()` | S7 | inline | edc3746 |
+| T11 | `quick-peek`: archivos antes que directorios en la lista de la sesión | S6 | inline | ec26c28 |
 
 ## Log
 
@@ -113,3 +123,14 @@ Concretamente: al pegar una imagen el editor recibe `[Image #N]` (N incremental 
 - Carga del artefacto empaquetado verificada: los dos tarballs se instalaron con `pi install` en un home aislado (`gs-lab/preview-agent`) y `pi list` los lista; el contenido extraído carga con una API de Pi simulada y registra `/peek` + `alt+o` (quick-peek) y `/image-paths` + `session_start`/`input`/`session_shutdown` (image-preview).
 - Límite de la verificación interactiva (T8): el home aislado arranca sin proveedor (`auth.json` de 2 bytes), así que la TUI de GS levanta y termina sin llegar al prompt. La verificación de render, hover y click en Omarchy queda pendiente de credenciales en ese home o de la corrida manual del usuario, que es lo que S8 asigna explícitamente.
 - Nota operativa: el primer arranque en un home de laboratorio nuevo provisiona el companion `npm:gentle-engram` de Gentle Shell **dentro de ese home**; `GENTLE_SHELL_NO_AUTO_SETUP` no lo bloquea y nunca toca `~/.gentle-shell` ni `~/.pi`. El launcher ahora falla cerrado (exit 3) cuando no hay proveedor, en vez de morir en silencio.
+
+**L5 — Corrección del usuario tras la primera prueba manual (verbatim).**
+
+> /home/erickfm/Pictures/screenshots/screenshot-2026-11-02_15-05-41.png
+> me indicaste que le dijera nombrame 3 archivos, y me muestra 4 incluyendome la carpeta packages/quick-peek/lib
+> cuando solo dije nmobrame 3 archivos
+> luego de eso saque un screenshoot y me aparece en el tmp, no deberia estar segun yo, porque no corresponde a lo que le pregunte.
+>
+> tambien hice el screen shot me aparecio la image #1 y luego borre y me aparecio el siguiente numero que es image #2 y asi sucecivamente cada vez que iba borrando, no respeto que si no tengo imagen dentro del inputo debe consdierarse nuevamente como el 1.
+
+Resuelto en edc3746 (numeración por borrador, destino fuera del temporal) y ec26c28 (archivos antes que directorios). La carpeta que aparece en la lista es intencional: una carpeta también se puede espiar y muestra sus primeras entradas; lo que estaba mal era el orden, que la hacía parecer un archivo más.
