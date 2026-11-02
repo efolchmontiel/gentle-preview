@@ -59,6 +59,9 @@ Regla: una imagen pegada no va al directorio temporal mientras exista una carpet
 | T9 | Cierre: reporte, plataformas sin verificar, decisión de publicación en npm | S8 | inline | ver L4 |
 | T10 | `image-preview`: numeración por borrador y destino de la imagen pegada fuera de `os.tmpdir()` | S7 | inline | edc3746 |
 | T11 | `quick-peek`: archivos antes que directorios en la lista de la sesión | S6 | inline | ec26c28 |
+| T12 | Repositorio público, issue-first, reglas de contribución y atribución | S2, S8 | inline | cc828c6 |
+| T13 | Publicación en npm (`gentle-quick-peek@0.1.0`, `gentle-image-preview@0.1.0`) y previews para el gallery de pi.dev | S3 | inline | 633b380 + npm |
+| T14 | Arreglo de los tests que asumían POSIX para que la matriz CI pase en Windows y macOS | S4, S8 | worker | ver L6 |
 
 ## Log
 
@@ -134,3 +137,16 @@ Regla: una imagen pegada no va al directorio temporal mientras exista una carpet
 > tambien hice el screen shot me aparecio la image #1 y luego borre y me aparecio el siguiente numero que es image #2 y asi sucecivamente cada vez que iba borrando, no respeto que si no tengo imagen dentro del inputo debe consdierarse nuevamente como el 1.
 
 Resuelto en edc3746 (numeración por borrador, destino fuera del temporal) y ec26c28 (archivos antes que directorios). La carpeta que aparece en la lista es intencional: una carpeta también se puede espiar y muestra sus primeras entradas; lo que estaba mal era el orden, que la hacía parecer un archivo más.
+
+**L6 — Publicación, repositorio y hallazgos de la entrega.**
+
+- Repositorio público creado: https://github.com/efolchmontiel/gentle-preview (`main` = commit de scaffold, 98d078c). Issue #1 y PR #2 (`Closes #1`), con la regla de que sólo el dueño mergea.
+- Publicado en npm: `gentle-quick-peek@0.1.0` y `gentle-image-preview@0.1.0`, ambos con `latest` apuntando a 0.1.0, `pi.image` y `assets/` en el tarball. El gallery de pi.dev toma el paquete por la keyword `pi-package`.
+- Verificación end-to-end de S3 en un home aislado: `pi install npm:gentle-quick-peek` + `pi install npm:gentle-image-preview` y después `gentle-shell --home <lab>` **sin** `-e`; el banner lista `quick-peek.ts` e `image-preview.ts` y `/peek` abre el overlay. El camino por npm alcanza.
+- Hallazgo 1: npm publica primero un placeholder `0.0.0-stage` y la versión real aparece al terminar el escaneo (minutos). El registro mostraba sólo el placeholder, no un fallo del publish.
+- Hallazgo 2: `npm install`/`pi install` fallaban con `ETARGET` porque el packument cacheado todavía tenía sólo el placeholder. `npm cache clean --force` lo resuelve; con `--cache` fresco la 0.1.0 resuelve.
+- Hallazgo 3: `pi install <ruta.tgz>` acepta el archivo pero al cargar lo trata como extensión y falla con `Unknown file extension ".tgz"`. Para probar un tarball hay que instalarlo por nombre (`npm:`) o extraerlo, no declararlo como paquete de archivo.
+- Hallazgo 4: la CI matriz encontró 11 fallos (10 en Windows, 1 en macOS) en tres niveles distintos, y mi primera lectura —"es sólo la suite"— era incorrecta. (a) **Defecto real de producción** en `image-preview/lib/clipboard.ts`: `readViaWindowsClipboard` decidía la conversión de ruta con `process.platform` en vez de la plataforma inyectada, así que en un host macOS o Windows el backend WSL nunca llamaba a `wslpath`. (b) Un fixture que escribía en `/tmp/...` y en Windows resolvía a `D:\tmp\...`. (c) Ocho casos de resolución de rutas con fixtures POSIX sobre el `resolve()` del host, más la falta de una costura para resolver rutas win32 desde Linux. Arreglado en su nivel: plataforma inyectada en el backend del portapapeles, `path` opcional en `PathResolutionContext` (default: el `node:path` del host), y cada caso corre ahora en las dos flavours sin saltear nada por `process.platform`.
+- Limitación conocida, marcada y no arreglada: `parseLocation` interpreta un `C:12` suelto como ruta `C` más línea 12. Ningún caso real lo dispara y cambiarlo es otra decisión.
+- Las cuatro capturas de los READMEs salen de una sesión real de Gentle Shell con las extensiones cargadas: el overlay se dibuja encima del banner de arranque y no pinta fondo, así que se capturó el ANSI real por filas y columnas visibles y se re-renderizó como frame estático.
+- Limpieza pedida: borrados los artefactos de prueba en `/tmp` (`gentle-preview-*`, `gp-load*`, `gpshots`, logs de ghostty/foot/wl-copy, caché npm temporal) y los `.tgz` del repo; sesiones tmux y servidor HTTP de captura cerrados.
