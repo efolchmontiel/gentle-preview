@@ -40,15 +40,15 @@ Concretamente: al pegar una imagen el editor recibe `[Image #N]` (N incremental 
 
 | ID | Tarea | Specs | Ruta | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | Scaffold del monorepo: pnpm workspaces, tsconfig estricto, runner de tests, LICENSE, .gitignore, CI matriz | S2, S5 | inline | pendiente |
-| T2 | `quick-peek`: resolución de rutas (absolutas, `~`, relativas, `:line:column`) y extracción de preview (código con línea iluminada, imagen, metadatos) | S6 | worker | pendiente |
-| T3 | `quick-peek`: overlay TUI con teclado y MouseRegion en fullscreen; click abre visor/file manager por plataforma; fallback sin soporte gráfico | S6 | worker | pendiente |
-| T4 | `image-preview`: paste → `[Image #N]`, mapa de sesión, expansión del token antes del modelo | S7 | worker | pendiente |
-| T5 | `image-preview`: banda de chips sobre el editor, hover → ruta o preview, click abre el visor | S7 | worker | pendiente |
-| T6 | Empaquetado: `pi` manifest por paquete, READMEs, docs de instalación para GS y pi | S2, S3 | inline | pendiente |
-| T7 | Tests unitarios por paquete y CI matriz ubuntu/windows/macos | S8 | inline | pendiente |
-| T8 | `gs-lab`: launcher aislado y corrida de verificación en Omarchy con evidencia | S9 | inline | pendiente |
-| T9 | Cierre: reporte, plataformas sin verificar, decisión de publicación en npm | S8 | inline | pendiente |
+| T1 | Scaffold del monorepo: pnpm workspaces, tsconfig estricto, runner de tests, LICENSE, .gitignore, CI matriz | S2, S5 | inline | 98d078c |
+| T2 | `quick-peek`: resolución de rutas (absolutas, `~`, relativas, `:line:column`) y extracción de preview (código con línea iluminada, imagen, metadatos) | S6 | worker | 87e4059, 5951b24 |
+| T3 | `quick-peek`: overlay TUI con teclado y MouseRegion en fullscreen; click abre visor/file manager por plataforma; fallback sin soporte gráfico | S6 | worker | 8b988b7 |
+| T4 | `image-preview`: paste → `[Image #N]`, mapa de sesión, expansión del token antes del modelo | S7 | worker | b9caf68, 0118482, f81df34 |
+| T5 | `image-preview`: banda de chips sobre el editor, hover → ruta o preview, click abre el visor | S7 | worker | 621cbe1 |
+| T6 | Empaquetado: `pi` manifest por paquete, READMEs, docs de instalación para GS y pi | S2, S3 | inline | 98d078c, b9caf68, 87e4059 |
+| T7 | Tests unitarios por paquete y CI matriz ubuntu/windows/macos | S8 | inline | 12bdf8e |
+| T8 | `gs-lab`: launcher aislado y corrida de verificación en Omarchy con evidencia | S9 | inline | parcial — launcher fuera del repo; ver L4 |
+| T9 | Cierre: reporte, plataformas sin verificar, decisión de publicación en npm | S8 | inline | ver L4 |
 
 ## Log
 
@@ -103,3 +103,13 @@ Concretamente: al pegar una imagen el editor recibe `[Image #N]` (N incremental 
 - E5: pi no adjunta la imagen pegada al prompt: la escribe en `os.tmpdir()/pi-clipboard-<uuid>.<ext>` e inserta la **ruta** en el editor (`dist/modes/interactive/interactive-mode.js:2479-2488`). `InputEvent` acepta `{action:"transform", text, images}` (`types.d.ts:910-927`), que es donde se expande el token.
 - E6: convenciones del repo hermano `gentle-voice`: pnpm workspace, `tsconfig.json` strict + `noEmit`, tests con `node --experimental-strip-types --test` vía `scripts/run-tests.mjs`, CI matriz ubuntu/windows/macos con node 22, `pi` manifest en package.json con keyword `pi-package`.
 - E7: homes distintos — GS usa `~/.gentle-shell/agent`, pi por defecto `~/.pi/agent`.
+
+**L4 — Entrega, desviaciones y límites de la verificación.**
+
+- Estado del árbol: 91 tests (54 `quick-peek` + 37 `image-preview`) en 0 fallos, `npm run typecheck` limpio, `npm run pack:check` genera los dos tarballs. Commits por unidad: 98d078c, b9caf68, 0118482, 621cbe1, 87e4059, 5951b24, 8b988b7, 12bdf8e, f81df34.
+- Desviación 1 (evidencia): el atajo de `quick-peek` es `alt+o`, no `alt+p`. `alt+p` es default de `app.model.cycleBackward` en Windows/WSL (`pi-coding-agent/dist/core/keybindings.js:33`); `alt+o` no aparece en los defaults ni en `RESERVED_KEYBINDINGS_FOR_EXTENSION_CONFLICTS`.
+- Desviación 2 (evidencia): `image-preview` no toma `ctrl+v`. `app.clipboard.pasteImage` no está reservado, la última extensión registrada gana (`dist/core/extensions/runner.js:459-474`), y en el home de GS ese atajo ya lo ocupa `paste-image-to-screenshots.ts`. Default `ctrl+shift+v`, configurable con `GENTLE_IMAGE_PREVIEW_SHORTCUT`; ponerlo en `ctrl+v` es opt-in documentado.
+- Defecto encontrado al inspeccionar el artefacto y corregido en f81df34: `image-preview` usaba *parameter properties* de TypeScript, que jiti acepta pero cualquier loader strip-only rechaza. Ahora los dos paquetes cargan igual bajo strip-only.
+- Carga del artefacto empaquetado verificada: los dos tarballs se instalaron con `pi install` en un home aislado (`gs-lab/preview-agent`) y `pi list` los lista; el contenido extraído carga con una API de Pi simulada y registra `/peek` + `alt+o` (quick-peek) y `/image-paths` + `session_start`/`input`/`session_shutdown` (image-preview).
+- Límite de la verificación interactiva (T8): el home aislado arranca sin proveedor (`auth.json` de 2 bytes), así que la TUI de GS levanta y termina sin llegar al prompt. La verificación de render, hover y click en Omarchy queda pendiente de credenciales en ese home o de la corrida manual del usuario, que es lo que S8 asigna explícitamente.
+- Nota operativa: el primer arranque en un home de laboratorio nuevo provisiona el companion `npm:gentle-engram` de Gentle Shell **dentro de ese home**; `GENTLE_SHELL_NO_AUTO_SETUP` no lo bloquea y nunca toca `~/.gentle-shell` ni `~/.pi`. El launcher ahora falla cerrado (exit 3) cuando no hay proveedor, en vez de morir en silencio.
