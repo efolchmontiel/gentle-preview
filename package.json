@@ -1,0 +1,34 @@
+{
+	"name": "gentle-preview",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Two Pi Coding Agent and Gentle Shell plugins for previewing file paths and pasted images.",
+	"license": "MIT",
+	"type": "module",
+	"author": "efolchmontiel",
+	"homepage": "https://github.com/efolchmontiel/gentle-preview#readme",
+	"bugs": {
+		"url": "https://github.com/efolchmontiel/gentle-preview/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/efolchmontiel/gentle-preview.git"
+	},
+	"engines": {
+		"node": ">=22.13"
+	},
+	"workspaces": [
+		"packages/*"
+	],
+	"scripts": {
+		"test": "node scripts/run-tests.mjs",
+		"typecheck": "tsc --noEmit -p tsconfig.json",
+		"pack:check": "npm run pack:check --workspaces --if-present"
+	},
+	"devDependencies": {
+		"@earendil-works/pi-coding-agent": "1.4.0",
+		"@earendil-works/pi-tui": "1.4.0",
+		"@types/node": "^24.13.3",
+		"typescript": "^5.9.3"
+	}
+}
