@@ -74,7 +74,7 @@ export function readClipboardImage(
 	if (platform === "darwin") {
 		backends.push(() => readViaStdout(run, ["pngpaste", "-"]));
 	} else if (platform === "win32" || isWsl(platform, env)) {
-		backends.push(() => readViaWindowsClipboard(run, env));
+		backends.push(() => readViaWindowsClipboard(run, platform, env));
 	} else if (platform === "linux") {
 		if (env.WAYLAND_DISPLAY !== undefined && env.WAYLAND_DISPLAY !== "") {
 			backends.push(() => readViaStdout(run, ["wl-paste", "--type", "image/png", "--no-newline"]));
@@ -108,7 +108,11 @@ function readViaStdout(run: CommandRunner, args: string[]): ClipboardImage | nul
 }
 
 /** Windows / WSL backend: PowerShell saves the clipboard image to a temp file. */
-function readViaWindowsClipboard(run: CommandRunner, env: NodeJS.ProcessEnv): ClipboardImage | null {
+function readViaWindowsClipboard(
+	run: CommandRunner,
+	platform: NodeJS.Platform,
+	env: NodeJS.ProcessEnv,
+): ClipboardImage | null {
 	const result = run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", POWERSHELL_CLIPBOARD_SCRIPT], {
 		timeoutMs: READ_TIMEOUT_MS,
 		maxBuffer: MAX_BUFFER,
@@ -116,16 +120,19 @@ function readViaWindowsClipboard(run: CommandRunner, env: NodeJS.ProcessEnv): Cl
 	if (result === null || result.status !== 0) return null;
 	const winPath = result.stdout.toString("utf8").trim();
 	if (winPath === "") return null;
-	const linuxPath = isWsl(process.platform, env) ? toWslPath(run, winPath) : winPath;
-	if (linuxPath === null) return null;
+	// Use the injected platform, not process.platform: the WSL conversion is a
+	// property of the backend being driven (linux + interop), not of the host
+	// running this module, and tests exercise this path from any OS.
+	const localPath = isWsl(platform, env) ? toWslPath(run, winPath) : winPath;
+	if (localPath === null) return null;
 	let bytes: Buffer;
 	try {
-		bytes = readFileSync(linuxPath);
+		bytes = readFileSync(localPath);
 	} catch {
 		return null;
 	}
 	try {
-		unlinkSync(linuxPath);
+		unlinkSync(localPath);
 	} catch {
 		// Best-effort cleanup of our own temp file.
 	}

@@ -1,4 +1,6 @@
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isWsl, readClipboardImage, type CommandResult, type CommandRunner } from "../lib/clipboard.ts";
@@ -96,7 +98,9 @@ test("darwin backend uses pngpaste and rejects garbage", () => {
 });
 
 test("windows backend drives PowerShell and reads the emitted temp file path", () => {
-	const tmp = `/tmp/gentle-preview-clipboard-${process.pid}.png`;
+	// os.tmpdir() keeps this inside the platform's own temp directory; a
+	// hardcoded "/tmp/..." is not writable-relative on Windows (D:\tmp).
+	const tmp = join(tmpdir(), `gentle-preview-clipboard-${process.pid}.png`);
 	writeFileSync(tmp, PNG);
 	try {
 		const run = fakeRunner({ "powershell.exe": () => ({ status: 0, stdout: Buffer.from(`${tmp}\n`) }) });
@@ -115,6 +119,8 @@ test("wsl backend converts the Windows path before reading", () => {
 		wslpath: () => ({ status: 0, stdout: Buffer.from("/mnt/c/Users/x/img.png") }),
 	});
 	// The converted path does not exist here; the backend must return null, not throw.
+	// The injected platform (not process.platform) must decide the WSL conversion,
+	// so this runs identically on Linux, Windows and macOS CI.
 	assert.equal(readClipboardImage(run, "linux", { WSL_DISTRO_NAME: "Ubuntu" }), null);
 	assert.ok(run.calls.some((call) => call.startsWith("wslpath -u")));
 });
