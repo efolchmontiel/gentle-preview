@@ -82,12 +82,16 @@ class ChipBand implements Component {
 	private cachedLines?: string[];
 	private chips: Chip[] = [];
 	private hover: HoverInfo | undefined;
+	private readonly theme: Theme;
+	private readonly getRefs: () => ImageRef[];
 	hoveredNumber: number | undefined;
 
-	constructor(
-		private readonly theme: Theme,
-		private readonly getRefs: () => ImageRef[],
-	) {}
+	// Assigning in the body instead of using parameter properties keeps the file
+	// loadable by strip-only TypeScript loaders, not just by Pi's jiti.
+	constructor(theme: Theme, getRefs: () => ImageRef[]) {
+		this.theme = theme;
+		this.getRefs = getRefs;
+	}
 
 	/** Chip under the given band column, if any. */
 	chipAt(x: number, y: number): Chip | undefined {
