@@ -83,32 +83,49 @@ after it. Unknown tokens produce no line.
 
 ## Paste shortcut
 
-- Default: `ctrl+shift+v` — deliberately **not** `ctrl+v`, which is Pi's
-  built-in clipboard paste (`app.clipboard.pasteImage`) and may already be
-  bound by another extension in your setup.
-- Override it once per session with an environment variable:
+- Default: `ctrl+v` — the key you already paste with. The shortcut replaces
+  Pi's built-in clipboard paste (`app.clipboard.pasteImage`), and that is safe
+  only because this handler also does what the built-in paste did: copied file
+  paths, then an image, then plain text. The last extension to register a
+  shortcut wins, so nothing of the old paste behaviour is lost.
+- Override it once per session with an environment variable — for example to
+  move it back out of the way:
 
   ```
-  GENTLE_IMAGE_PREVIEW_SHORTCUT=ctrl+alt+v pi
+  GENTLE_IMAGE_PREVIEW_SHORTCUT=ctrl+shift+v pi
   ```
 
-  Pointing it at `ctrl+v` explicitly opts into replacing Pi's built-in paste;
-  the last registered extension wins.
 - The environment variable is read at session start; changing it requires
   starting a new session (or restarting).
 
-### Clipboard backends (per platform)
+### What a paste does, in order
 
-The shortcut tries the available backends in order and **does nothing** when
-none can read an image, so Pi's own paste behaviour stays intact:
+The handler reads the clipboard once and takes the first thing it can read:
 
-- **macOS**: `pngpaste -` (homebrew), if installed.
-- **Windows**: PowerShell `System.Windows.Forms.Clipboard::GetImage`, saved as
-  PNG to a temp file.
-- **WSL**: the same PowerShell script through `powershell.exe` Windows interop,
-  with the path converted back via `wslpath -u`.
-- **Linux**: `wl-paste` (Wayland) then `xclip` (X11), for PNG and JPEG
-  payloads.
+1. **An image** — saved to your pictures folder and inserted as `[Image #N]`
+   (unchanged behaviour; see below for where it lands).
+2. **Copied file paths** — from a file-manager copy, inserted the way Pi
+   inserts them: one per line, or space-joined and quoted when the editor is
+   in bash mode (the draft starts with `!`).
+3. **Plain text** — inserted verbatim.
+4. **Nothing readable** — the editor stays untouched; no partial or empty
+   paste is ever inserted.
+
+### Clipboard coverage (per platform)
+
+| Platform              | Image                                          | Copied file paths                                                                                          | Text                                |
+| --------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| Linux · Wayland       | `wl-paste --list-types`, first valid image type | `x-special/gnome-copied-files` / `text/uri-list`                                                            | first `text/*` type                 |
+| Linux · X11           | `xclip -t TARGETS`, first valid image type     | same types as Wayland                                                                                       | same                                |
+| macOS                 | `pngpaste -` (homebrew)                        | **not covered** — Finder copies live on the native pasteboard and no bounded one-shot command returns them  | `pbpaste`                           |
+| Windows               | PowerShell `Clipboard::GetImage` → temp PNG    | `Get-Clipboard -Format FileDropList`                                                                        | `Get-Clipboard -Raw`                |
+| WSL                   | PowerShell via `powershell.exe`, path converted with `wslpath -u` | same, paths converted with `wslpath -u` (the raw Windows path is kept if conversion fails) | `Get-Clipboard -Raw` via `powershell.exe` — only what the Windows interop reaches |
+
+On Wayland the backend is selected by `WAYLAND_DISPLAY` or `WL_DISPLAY`; on
+X11 by `DISPLAY`. If neither is set, nothing is spawned and the paste does
+nothing. Image payloads are always validated by magic bytes before anything
+is saved; a payload that is not a recognisable PNG/JPEG/GIF/WebP falls through
+to the next category instead of being pasted as a broken image.
 
 ## Chip band above the editor
 
@@ -151,8 +168,9 @@ own is never cleaned, and an image identical to one already there reuses that
   fullscreen; in regular mode the band still renders (chips and shortcuts), and
   `/image-paths` covers lookup from the keyboard.
 - Clipboard reading requires the platform helper to be available (`pngpaste`,
-  `wl-paste`/`xclip`, or PowerShell); without one, pasting images through this
-  extension silently does nothing.
+  `wl-paste`/`xclip`, or PowerShell); without one, pasting through this
+  extension does nothing. macOS file copies are the one gap in the matrix
+  above (see the coverage table).
 
 ## Install
 
