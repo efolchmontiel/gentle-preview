@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
-import { extractPaths, type PathResolutionContext } from "../lib/paths.ts";
+import { extractPaths, orderRefsForDisplay, type PathResolutionContext } from "../lib/paths.ts";
 
 function ctx(exists: (path: string) => boolean, overrides?: Partial<PathResolutionContext>): PathResolutionContext {
 	return {
@@ -141,5 +141,26 @@ describe("path extraction with the real filesystem", () => {
 		});
 		assert.equal(refs.length, 2, JSON.stringify(refs));
 		assert.ok(refs.every((r) => r.resolved));
+	});
+});
+
+describe("orderRefsForDisplay", () => {
+	it("puts files before directories and keeps the order of appearance inside each group", () => {
+		const refs = [
+			{ path: "/p", raw: "pkg/lib", isDirectory: true },
+			{ path: "/a", raw: "a.ts" },
+			{ path: "/q", raw: "pkg/lib", isDirectory: true },
+			{ path: "/b", raw: "b.ts" },
+		];
+		assert.deepEqual(
+			orderRefsForDisplay(refs).map((ref) => ref.raw),
+			["a.ts", "b.ts", "pkg/lib", "pkg/lib"],
+		);
+	});
+
+	it("does not mutate the input", () => {
+		const refs = [{ path: "/p", isDirectory: true }, { path: "/a" }];
+		orderRefsForDisplay(refs);
+		assert.equal(refs[0]?.isDirectory, true);
 	});
 });

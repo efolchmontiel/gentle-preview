@@ -23,7 +23,10 @@ gentle-shell install npm:gentle-quick-peek
 - Without arguments, the overlay lists the file paths found in the current
   session transcript (user messages, assistant text, tool-call arguments and
   tool results) and previews the focused one. Only paths that resolve to an
-  existing file or directory are listed.
+  existing file or directory are listed. Directories are included on purpose —
+  a folder previews its first entries — but they are listed after the files and
+  marked with a trailing `/`, so a reply that names a folder and its files does
+  not make the folder look like one more file.
 - With an argument, that path is previewed directly. `:line` and
   `:line:column` suffixes are honoured: the requested line is marked and the
   window is centered around it.

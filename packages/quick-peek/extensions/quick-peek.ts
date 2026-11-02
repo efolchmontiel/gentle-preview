@@ -47,7 +47,7 @@ import {
 	type RevealDeps,
 	type WslExecDeps,
 } from "../lib/open.ts";
-import { extractPaths, type PathRef, type PathResolutionContext } from "../lib/paths.ts";
+import { extractPaths, orderRefsForDisplay, type PathRef, type PathResolutionContext } from "../lib/paths.ts";
 import {
 	buildPreview,
 	defaultPreviewDeps,
@@ -441,10 +441,13 @@ function collectSessionRefs(ctx: PeekUiContext): PathRef[] {
 			if (seen.has(key)) continue;
 			seen.add(key);
 			refs.push(ref);
-			if (refs.length >= MAX_ITEMS) return refs;
+			if (refs.length >= MAX_ITEMS) break;
 		}
+		if (refs.length >= MAX_ITEMS) break;
 	}
-	return refs;
+	// A reply that names a folder together with its files must not make the folder
+	// look like one more file: files first, directories last.
+	return orderRefsForDisplay(refs);
 }
 
 export default function quickPeek(pi: ExtensionAPI): void {

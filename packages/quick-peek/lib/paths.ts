@@ -182,3 +182,12 @@ export function extractPaths(text: string, ctx: PathResolutionContext): PathRef[
 		});
 	}	return refs;
 }
+
+/**
+ * Display order for a candidate list: files first, directories last, otherwise
+ * the order of appearance. `Array.prototype.sort` is stable, so entries that
+ * share a group keep the order they were found in.
+ */
+export function orderRefsForDisplay<T extends { isDirectory?: boolean }>(refs: readonly T[]): T[] {
+	return [...refs].sort((a, b) => Number(a.isDirectory === true) - Number(b.isDirectory === true));
+}
