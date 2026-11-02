@@ -1,7 +1,16 @@
 {
 	"name": "gentle-quick-peek",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Preview a file, its lines around a given line, or its thumbnail from inside a Pi or Gentle Shell session, without opening it.",
+	"homepage": "https://github.com/efolchmontiel/gentle-preview/tree/main/packages/quick-peek#readme",
+	"bugs": {
+		"url": "https://github.com/efolchmontiel/gentle-preview/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/efolchmontiel/gentle-preview.git",
+		"directory": "packages/quick-peek"
+	},
 	"license": "MIT",
 	"type": "module",
 	"keywords": [
