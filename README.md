@@ -34,6 +34,29 @@ gentle-shell -e ./packages/quick-peek/extensions/quick-peek.ts
 pi -e ./packages/image-preview/extensions/image-preview.ts
 ```
 
+## Usage
+
+### gentle-quick-peek
+
+| Action | Command or key |
+| --- | --- |
+| Preview a path, optionally at a line and column | `/peek src/app.ts:42` · `/peek src/app.ts:42:7` |
+| List the paths this session has mentioned, with a live preview | `alt+o` |
+| Move through the list | `↑` / `↓`, `PageUp` / `PageDown` |
+| Reveal the focused file or folder in your file manager | `Enter`, or a click in fullscreen |
+| Close the preview | `Esc` |
+
+### gentle-image-preview
+
+| Action | Command or key |
+| --- | --- |
+| Paste, turning an image into `[Image #N]` (and keeping text and file pastes working) | `ctrl+v` — move it with `GENTLE_IMAGE_PREVIEW_SHORTCUT` |
+| List the images in the current draft with their real paths | `/image-paths` |
+| Preview a pasted image, or read its path | hover the chip above the editor |
+| Open the image in the system viewer | click the chip |
+
+A pasted image is written next to your screenshots as `screenshot-YYYY-MM-DD_HH-MM-SS.<ext>`, in the folder you already configured.
+
 ## What it looks like
 
 `gentle-quick-peek` — a code file with the named line lit, and a directory with its first entries:

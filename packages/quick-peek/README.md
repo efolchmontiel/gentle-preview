@@ -10,26 +10,16 @@ terminal supports it; and every preview shows name, type, size and age.
 
 ## Install
 
-```sh
+Pi:
+
+```bash
 pi install npm:gentle-quick-peek
-# or, from Gentle Shell:
-gentle-shell install npm:gentle-quick-peek
 ```
-
-## Usage
-
-## Install
 
 Gentle Shell:
 
 ```bash
 gentle-shell install npm:gentle-quick-peek
-```
-
-Pi:
-
-```bash
-pi install npm:gentle-quick-peek
 ```
 
 Without installing, from a checkout of this repository:
@@ -38,15 +28,15 @@ Without installing, from a checkout of this repository:
 pi -e ./packages/quick-peek/extensions/quick-peek.ts
 ```
 
-## Examples
+## Usage
 
-![A code file previewed with the named line lit](assets/peek-code.png)
-
-![A directory previewed with its first entries](assets/peek-directory.png)
-
-
-Both frames come from a real session running the packaged extension, captured
-from the running TUI and re-rendered as a static frame for legibility.
+| Action | Command or key |
+| --- | --- |
+| Preview a path, optionally at a line and column | `/peek src/app.ts:42` · `/peek src/app.ts:42:7` |
+| List the paths this session has mentioned | `alt+o` |
+| Move through the list | `↑` / `↓`, `PageUp` / `PageDown` |
+| Reveal the focused file or folder | `Enter`, or a click in fullscreen |
+| Close the preview | `Esc` |
 
 **Command:** `/peek [path[:line[:column]]]`
 
@@ -80,6 +70,15 @@ In fullscreen mode, hovering a path row moves the preview focus to it and a
 left click reveals the file. Mouse events are ignored outside fullscreen (Pi
 routes normalized mouse input to extensions only there) — the keyboard always
 works.
+
+## Examples
+
+![A code file previewed with the named line lit](assets/peek-code.png)
+
+![A directory previewed with its first entries](assets/peek-directory.png)
+
+Both frames come from a real session running the packaged extension, captured
+from the running TUI and re-rendered as a static frame for legibility.
 
 ## Per-platform reveal behaviour
 
