@@ -4,6 +4,40 @@ A Pi / Gentle Shell extension that replaces long pasted-image paths with short,
 numbered `[Image #N]` tokens — and lets you hover or click them to see what
 they point at.
 
+## Install
+
+Gentle Shell:
+
+```bash
+gentle-shell install npm:gentle-image-preview
+```
+
+Pi:
+
+```bash
+pi install npm:gentle-image-preview
+```
+
+Without installing, from a checkout of this repository:
+
+```bash
+pi -e ./packages/image-preview/extensions/image-preview.ts
+```
+
+## Examples
+
+![One pasted image numbered in the prompt](assets/image-one.png)
+
+![Two images numbered in the same draft](assets/image-two.png)
+
+
+The second frame shows the numbering rule: each image pasted into the same draft
+takes the next number, and an emptied draft starts again at `[Image #1]`.
+
+
+Both frames come from a real session running the packaged extension, captured
+from the running TUI and re-rendered as a static frame for legibility.
+
 ## What it does
 
 Pasting an image from the clipboard normally inserts a long temp-file path into

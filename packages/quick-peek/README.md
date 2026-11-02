@@ -18,6 +18,36 @@ gentle-shell install npm:gentle-quick-peek
 
 ## Usage
 
+## Install
+
+Gentle Shell:
+
+```bash
+gentle-shell install npm:gentle-quick-peek
+```
+
+Pi:
+
+```bash
+pi install npm:gentle-quick-peek
+```
+
+Without installing, from a checkout of this repository:
+
+```bash
+pi -e ./packages/quick-peek/extensions/quick-peek.ts
+```
+
+## Examples
+
+![A code file previewed with the named line lit](assets/peek-code.png)
+
+![A directory previewed with its first entries](assets/peek-directory.png)
+
+
+Both frames come from a real session running the packaged extension, captured
+from the running TUI and re-rendered as a static frame for legibility.
+
 **Command:** `/peek [path[:line[:column]]]`
 
 - Without arguments, the overlay lists the file paths found in the current
